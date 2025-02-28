@@ -63,7 +63,7 @@ while running:
             if i != j:
                 if circle_collision([i.x_pos, i.y_pos], i.collision_radius, [j.x_pos, j.y_pos], j.collision_radius):
                     # todo: Implement collision response
-                    pass
+                    collision_velocity_update(i, j)
         i.update()
         SDL_RenderTextureRotated(renderer, i.texture, None, i.position_rect, i.angle, None, SDL_FLIP_NONE)
         if i.is_out_of_bounds:
