@@ -1,4 +1,20 @@
 import numpy as np
+import ctypes
+from sdl3 import *
+
+def pixel_alpha_channel_extraction(surface):
+    pixels_pointer = surface.contents.pixels
+    pitch = surface.contents.pitch
+    height = surface.contents.h
+    width = surface.contents.w
+    
+    raw_data = ctypes.string_at(pixels_pointer, pitch * height)
+    pixel_array = np.frombuffer(raw_data, dtype = Uint32)
+    pixel_array = pixel_array.reshape((height, width))
+    alpha_channel_array = pixel_array & 0xFF > 0
+    alpha_channel_array = np.where(alpha_channel_array)
+    alpha_channel_array = np.column_stack((alpha_channel_array[1], alpha_channel_array[0]))
+    return alpha_channel_array
 
 # Calculate the angle between the y-axis and the vector pointing from point1 to point2
 def angle_y_axis_two_points(point1, point2):
@@ -14,11 +30,41 @@ def angle_y_axis_two_points(point1, point2):
 
 def circle_collision(position_1, radius_1, position_2, radius_2):
     distance = np.sqrt((position_1[0] - position_2[0]) ** 2 + (position_1[1] - position_2[1]) ** 2)
-    return distance < radius_1 + radius_2
+    return distance <= radius_1 + radius_2
 
-def pixel_perfect_collision():
+def pixel_perfect_collision(object_1, object_2):
+    # Get non-transparent pixel arrays
+    pixel_array_1 = object_1.alpha_channel_array
+    pixel_array_2 = object_2.alpha_channel_array
+    #print(pixel_array_1)
+
+    # Transform both arrays to global coordinates
+    angle_1 = np.radians(object_1.angle)
+    angle_2 = np.radians(object_2.angle)
     
-    pass
+    #print(angle_1, object_1.x_pos)
+    #print(pixel_array_1[:, 0])
+    pixel_array_1[:, 0] = pixel_array_1[:, 0] * np.cos(angle_1) + object_1.x_pos
+    pixel_array_1[:, 1] = pixel_array_1[:, 1] * np.sin(angle_1) + object_1.y_pos
+    
+    pixel_array_2[:, 0] = pixel_array_2[:, 0] * np.cos(angle_2) + object_2.x_pos
+    pixel_array_2[:, 1] = pixel_array_2[:, 1] * np.sin(angle_2) + object_2.y_pos
+    
+    # Merge arrays into one
+    merged_array = np.vstack((pixel_array_1, pixel_array_2))
+    #print(merged_array)
+    
+    # Check if inside radius of object 1
+    object_1_position = np.array([object_1.x_pos, object_1.y_pos])
+    distances_squared = (merged_array[:, 0] - object_1_position[0]) ** 2 + (merged_array[:, 1] - object_1_position[1]) ** 2
+    merged_array = merged_array[distances_squared <= object_1.collision_radius ** 2]
+    
+    # Repeat for object 2
+    object_2_position = np.array([object_2.x_pos, object_2.y_pos])
+    distances_squared = (merged_array[:, 0] - object_2_position[0]) ** 2 + (merged_array[:, 1] - object_2_position[1]) ** 2
+    merged_array = merged_array[distances_squared <= object_2.collision_radius ** 2]
+    
+    return merged_array
 
 def collision_velocity_update(object_1, object_2):
     # Elastic collision
