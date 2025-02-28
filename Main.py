@@ -1,4 +1,5 @@
 import sys, time, numpy as np
+import ctypes
 from sdl3 import *
 from GameObject import *
 from Boot import *
@@ -71,6 +72,23 @@ while running:
             asteroid_list.append(Asteroid(renderer))
     SDL_RenderTextureRotated(renderer, player_spaceship.texture, None, player_spaceship.position_rect, player_spaceship.angle, None, SDL_FLIP_NONE)
     SDL_RenderPresent(renderer)
+    
+    pixel_format = player_spaceship.surface.contents.format
+    if pixel_format != SDL_PIXELFORMAT_RGBA8888:
+        print("Wrong format", pixel_format, SDL_PIXELFORMAT_RGBA8888)
+    pitch = player_spaceship.surface.contents.pitch
+    pixels = ctypes.cast(player_spaceship.surface.contents.pixels, ctypes.POINTER(ctypes.c_uint32))
+    print(pixels)
+    pixel_array = np.frombuffer(ctypes.string_at(pixels, pitch * player_spaceship.height), dtype=np.uint32)
+    pixel_array = pixel_array.reshape((player_spaceship.height, player_spaceship.width))
+    pixel_value = pixel_array[0, 0]
+    r = (pixel_value >> 24) & 0xFF
+    g = (pixel_value >> 16) & 0xFF
+    b = (pixel_value >> 8) & 0xFF
+    a = pixel_value & 0xFF
+    print(r, g, b ,a)
+    #print(SDL_GetRGBA(player_spaceship.surface.contents.pixels, SDL_GetPixelFormatDetails(player_spaceship.surface.contents.format), None, None, None, None, None))
+    
     frame_time = time.time() - frame_start_time
     if frame_time < seconds_per_frame:
         time.sleep(seconds_per_frame - frame_time)

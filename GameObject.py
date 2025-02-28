@@ -1,4 +1,5 @@
 import numpy as np
+import ctypes
 from sdl3 import *
 from Math import *
 
@@ -11,6 +12,7 @@ class Spaceship():
         self.angle = 0
         self.file_path = "c:/Users/Mike/3D Objects/AI_Project/spaceship.png"
         self.surface = IMG_Load(self.file_path.encode("utf-8"))
+        self.surface = SDL_ConvertSurface(self.surface, SDL_PIXELFORMAT_RGBA8888)
         self.width = self.surface.contents.w
         self.height = self.surface.contents.h
         self.position_rect = SDL_FRect(self.x_pos - self.width / 2, self.y_pos - self.height / 2, self.width, self.height)

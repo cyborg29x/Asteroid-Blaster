@@ -16,6 +16,10 @@ def circle_collision(position_1, radius_1, position_2, radius_2):
     distance = np.sqrt((position_1[0] - position_2[0]) ** 2 + (position_1[1] - position_2[1]) ** 2)
     return distance < radius_1 + radius_2
 
+def pixel_perfect_collision():
+    
+    pass
+
 def collision_velocity_update(object_1, object_2):
     # Elastic collision
     m1 = object_1.width * object_1.height  # Approximate mass based on size
