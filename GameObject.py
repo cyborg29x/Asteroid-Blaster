@@ -1,7 +1,7 @@
 import numpy as np
 import ctypes
 from sdl3 import *
-from Math import *
+from GameLogic import *
 
 class Spaceship():
     def __init__(self, x, y, renderer):
@@ -73,7 +73,8 @@ class Asteroid():
         self.file_path = "c:/Users/Mike/3D Objects/AI_Project/asteroid.png"
         self.surface = IMG_Load(self.file_path.encode("utf-8"))
         self.surface = SDL_ConvertSurface(self.surface, SDL_PIXELFORMAT_RGBA8888)
-        self.alpha_channel_array = pixel_alpha_channel_extraction(self.surface)
+        self.alpha_channel_array = pixel_alpha_channel_extraction(self.surface).copy()
+        #print(self.alpha_channel_array)
         self.width = self.surface.contents.w
         self.height = self.surface.contents.h
         self.position_rect = SDL_FRect(self.x_pos - self.width / 2, self.y_pos - self.height / 2, self.width, self.height)
@@ -86,7 +87,7 @@ class Asteroid():
         self.y_pos += self.y_velocity
         self.position_rect.x = self.x_pos - self.width / 2
         self.position_rect.y = self.y_pos - self.height / 2
-        self.angle += self.angular_velocity
+        #self.angle += self.angular_velocity
         if self.x_pos < -self.collision_radius or self.x_pos > 1280 + self.collision_radius or self.y_pos < -self.collision_radius or self.y_pos > 720 + self.collision_radius:
             self.is_out_of_bounds = True
         
