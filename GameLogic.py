@@ -167,12 +167,45 @@ def collision_velocity_update(object_1, object_2, pixel_collision_array):
     #object_2.y_velocity = v2y_new
     
     # Separate slightly to prevent sticking
-    distance = np.sqrt((object_1.x_pos - object_2.x_pos)**2 + (object_1.y_pos - object_2.y_pos)**2)
-    overlap = object_1.collision_radius + object_2.collision_radius - distance
-    dx = (object_1.x_pos - object_2.x_pos) / distance
-    dy = (object_1.y_pos - object_2.y_pos) / distance
+    #distance = np.sqrt((object_1.x_pos - object_2.x_pos)**2 + (object_1.y_pos - object_2.y_pos)**2)
+    #overlap = object_1.collision_radius + object_2.collision_radius - distance
+    #dx = (object_1.x_pos - object_2.x_pos) / distance
+    #dy = (object_1.y_pos - object_2.y_pos) / distance
     
-    object_1.x_pos += overlap * dx / 2
-    object_1.y_pos += overlap * dy / 2
-    object_2.x_pos -= overlap * dx / 2
-    object_2.y_pos -= overlap * dy / 2
+    #object_1.x_pos += overlap * dx / 2
+    #object_1.y_pos += overlap * dy / 2
+    #object_2.x_pos -= overlap * dx / 2
+    #object_2.y_pos -= overlap * dy / 2
+    
+def physics_update(objects_list):
+    i = 0
+    while i < len(objects_list):
+        j = 0
+        original_x_pos = objects_list[i].x_pos
+        original_y_pos = objects_list[i].y_pos
+        original_position_rect = objects_list[i].position_rect
+        objects_list[i].x_pos += objects_list[i].x_velocity
+        objects_list[i].y_pos += objects_list[i].y_velocity
+        objects_list[i].position_rect.x = objects_list[i].x_pos - objects_list[i].width / 2
+        objects_list[i].position_rect.y = objects_list[i].y_pos - objects_list[i].height / 2
+        while j < len(objects_list):
+            if (j != i
+                and distance_between(objects_list[i], objects_list[j]) <= (objects_list[i].collision_radius + objects_list[j].collision_radius)
+                and pixel_perfect_collision(objects_list[i], objects_list[j]).size > 0):
+                #print("collision", i, j)
+                pixel_collision_array = pixel_perfect_collision(objects_list[i], objects_list[j])
+                collision_velocity_update(objects_list[i], objects_list[j], pixel_collision_array)
+                #objects_list[i].x_pos = original_x_pos
+                #objects_list[i].y_pos = original_y_pos
+                #objects_list[i].position_rect = original_position_rect
+            j += 1
+        if (objects_list[i].x_pos < -objects_list[i].collision_radius
+            or objects_list[i].x_pos > 1280 + objects_list[i].collision_radius
+            or objects_list[i].y_pos < -objects_list[i].collision_radius
+            or objects_list[i].y_pos > 720 + objects_list[i].collision_radius):
+            objects_list[i].is_out_of_bounds = True
+        i += 1
+
+        
+def distance_between(object_1, object_2):
+    return np.sqrt((object_1.x_pos - object_2.x_pos) ** 2 + (object_1.y_pos - object_2.y_pos) ** 2)

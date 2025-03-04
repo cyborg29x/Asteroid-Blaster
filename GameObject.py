@@ -90,9 +90,6 @@ class Asteroid():
         #self.angle += self.angular_velocity
         if self.x_pos < -self.collision_radius or self.x_pos > 1280 + self.collision_radius or self.y_pos < -self.collision_radius or self.y_pos > 720 + self.collision_radius:
             self.is_out_of_bounds = True
-        
-    def update_collision(self, asteroid):
-        asteroid.x_velocity = -asteroid.x_velocity
 
 class Cursor():
     def __init__(self):

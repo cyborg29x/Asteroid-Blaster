@@ -10,6 +10,7 @@ from Boot import *
 window_w = 1280
 window_h = 720
 window, renderer = initialize(window_w, window_h)
+asteroid_prototype = load_sprites(renderer)
 
 cursor = Cursor()
 
@@ -61,23 +62,24 @@ while running:
     for i in background_dot_list:
         i.update([player_spaceship.x_velocity, player_spaceship.y_velocity])
         SDL_RenderTexture(renderer, i.texture, None, i.position_rect)
+    physics_update(asteroid_list)
     i = 0
     while i < len(asteroid_list):
-        j = i
-        while j < len(asteroid_list):
-            if i != j:
-                if circle_collision([asteroid_list[i].x_pos, asteroid_list[i].y_pos], asteroid_list[i].collision_radius, 
-                                    [asteroid_list[j].x_pos, asteroid_list[j].y_pos], asteroid_list[j].collision_radius):
+        #j = i
+        #while j < len(asteroid_list):
+            #if i != j:
+                #if circle_collision([asteroid_list[i].x_pos, asteroid_list[i].y_pos], asteroid_list[i].collision_radius, 
+                #                    [asteroid_list[j].x_pos, asteroid_list[j].y_pos], asteroid_list[j].collision_radius):
                     # todo: Implement collision response
-                    pixel_collision_array = pixel_perfect_collision(asteroid_list[i], asteroid_list[j])
+                    #pixel_collision_array = pixel_perfect_collision(asteroid_list[i], asteroid_list[j])
                     #print(pixel_collision_array)
-                    if pixel_collision_array.size > 0:
-                        collision_velocity_update(asteroid_list[i], asteroid_list[j], pixel_collision_array)
-            j += 1
+                    #if pixel_collision_array.size > 0:
+                        #collision_velocity_update(asteroid_list[i], asteroid_list[j], pixel_collision_array)
+            #j += 1
         #os.system('cls')
         #print(i.alpha_channel_array)
-        asteroid_list[i].update()
-        SDL_RenderTextureRotated(renderer, asteroid_list[i].texture, None, 
+        #asteroid_list[i].update()
+        SDL_RenderTextureRotated(renderer, asteroid_prototype.texture, None, 
                                  asteroid_list[i].position_rect, asteroid_list[i].angle, None, SDL_FLIP_NONE)
         if asteroid_list[i].is_out_of_bounds:
             asteroid_list.remove(asteroid_list[i])
