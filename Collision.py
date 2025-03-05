@@ -36,7 +36,7 @@ def get_boundary_pixels(surface):
     
     # Convert to float for further processing
     boundary_array = boundary_array.astype(float)
-    #print(boundary_array)
+    #print(boundary_array.size)
     
     SDL_UnlockSurface(surface)
     return boundary_array
