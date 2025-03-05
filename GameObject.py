@@ -2,6 +2,7 @@ import numpy as np
 import ctypes
 from sdl3 import *
 from GameLogic import *
+from Collision import *
 
 class Spaceship():
     def __init__(self, x, y, renderer):
@@ -66,8 +67,10 @@ class Asteroid():
     def __init__(self, renderer):
         self.x_pos = np.random.randint(0, 1280)
         self.y_pos = np.random.randint(0, 720)
+        self.pos = np.array([self.x_pos, self.y_pos])
         self.x_velocity = np.random.randint(-16, 16) / 10
         self.y_velocity = np.random.randint(-16, 16) / 10
+        self.vel = np.array([self.x_velocity, self.y_velocity])
         self.angle = np.random.randint(0, 360)
         self.angular_velocity = np.random.randint(-10, 10) / 10
         self.file_path = "c:/Users/Mike/3D Objects/AI_Project/asteroid.png"
@@ -81,6 +84,9 @@ class Asteroid():
         self.texture = SDL_CreateTextureFromSurface(renderer, self.surface)
         self.collision_radius = np.sqrt(self.width ** 2 + self.height ** 2) / 2
         self.is_out_of_bounds = False
+        self.is_colliding = False
+        self.boundary_pixels = get_boundary_pixels(self.surface).copy()
+        #print(self.boundary_pixels)
         
     def update(self):
         self.x_pos += self.x_velocity
