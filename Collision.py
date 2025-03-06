@@ -11,23 +11,15 @@ def get_boundary_pixels(surface):
     raw_data = ctypes.string_at(pixels_pointer, pitch * height)
     pixel_array = np.frombuffer(raw_data, dtype = Uint32).copy()
     pixel_array = pixel_array.reshape((height, width))
-    alpha_channel_array = pixel_array & 0xFF == 255
+    alpha_channel_array = (pixel_array & 0xFF) > 0
     opaque_pixels = np.column_stack(np.where(alpha_channel_array))
     
-    # Find boundary pixels
-    boundary_mask = np.zeros_like(alpha_channel_array, dtype=bool)
-
-    for y, x in opaque_pixels:
-        # Check 8-connected neighbors (up, down, left, right, diagonals)
-        if (y > 0 and not alpha_channel_array[y - 1, x]) or \
-           (y < height - 1 and not alpha_channel_array[y + 1, x]) or \
-           (x > 0 and not alpha_channel_array[y, x - 1]) or \
-           (x < width - 1 and not alpha_channel_array[y, x + 1]) or \
-           (y > 0 and x > 0 and not alpha_channel_array[y - 1, x - 1]) or \
-           (y > 0 and x < width - 1 and not alpha_channel_array[y - 1, x + 1]) or \
-           (y < height - 1 and x > 0 and not alpha_channel_array[y + 1, x - 1]) or \
-           (y < height - 1 and x < width - 1 and not alpha_channel_array[y + 1, x + 1]):
-            boundary_mask[y, x] = True
+    # Vectorized boundary detection using np.pad to check 8-connected neighbors
+    padded = np.pad(alpha_channel_array, pad_width=1, mode='constant', constant_values=False)
+    inner = padded[:-2, :-2] & padded[:-2, 1:-1] & padded[:-2, 2:] & \
+            padded[1:-1, :-2] & padded[1:-1, 2:] & \
+            padded[2:, :-2] & padded[2:, 1:-1] & padded[2:, 2:]
+    boundary_mask = alpha_channel_array & (~inner)
     #print(boundary_mask)
     # Get coordinates of boundary pixels
     boundary_array = np.where(boundary_mask)
@@ -37,6 +29,10 @@ def get_boundary_pixels(surface):
     # Convert to float for further processing
     boundary_array = boundary_array.astype(float)
     #print(boundary_array.size)
+    
+    # Translate origin to center of surface
+    boundary_array[:, 0] -= width / 2
+    boundary_array[:, 1] -= height / 2    
     
     SDL_UnlockSurface(surface)
     return boundary_array

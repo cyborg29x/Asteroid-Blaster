@@ -351,3 +351,163 @@ def collision_velocity_update(object_1, object_2, pixel_collision_array):
     #object_1.y_pos += overlap * dy / 2
     #object_2.x_pos -= overlap * dx / 2
     #object_2.y_pos -= overlap * dy / 2
+    
+def pixel_perfect_collision(object_1, object_2):
+    # Get non-transparent pixel arrays
+    pixel_array_1 = object_1.alpha_channel_array.astype(float).copy()
+    pixel_array_2 = object_2.alpha_channel_array.astype(float).copy()
+    #print(pixel_array_1)
+
+    # Transform both arrays to global coordinates
+    angle_1 = np.radians(object_1.angle)
+    angle_2 = np.radians(object_2.angle)
+    
+    #print(angle_1, object_1.x_pos)
+    #print(pixel_array_1[:, 0])
+    pixel_array_1[:, 0] = pixel_array_1[:, 0] * np.cos(angle_1) + object_1.x_pos
+    pixel_array_1[:, 1] = pixel_array_1[:, 1] * np.sin(angle_1) + object_1.y_pos
+    
+    pixel_array_2[:, 0] = pixel_array_2[:, 0] * np.cos(angle_2) + object_2.x_pos
+    pixel_array_2[:, 1] = pixel_array_2[:, 1] * np.sin(angle_2) + object_2.y_pos
+    
+    # Merge arrays into one
+    merged_array = np.vstack((pixel_array_1, pixel_array_2))
+    #print(merged_array)
+    
+    # Check if inside radius of object 1
+    object_1_position = np.array([object_1.x_pos, object_1.y_pos])
+    distances_squared = (merged_array[:, 0] - object_1_position[0]) ** 2 + (merged_array[:, 1] - object_1_position[1]) ** 2
+    merged_array = merged_array[distances_squared < object_1.collision_radius ** 2]
+    
+    # Repeat for object 2
+    object_2_position = np.array([object_2.x_pos, object_2.y_pos])
+    distances_squared = (merged_array[:, 0] - object_2_position[0]) ** 2 + (merged_array[:, 1] - object_2_position[1]) ** 2
+    merged_array = merged_array[distances_squared < object_2.collision_radius ** 2]
+    
+    #print(merged_array)
+    return merged_array
+
+def get_boundary_pixels(surface):
+    SDL_LockSurface(surface)
+    pixels_pointer = surface.contents.pixels
+    pitch = surface.contents.pitch
+    height = surface.contents.h
+    width = surface.contents.w
+    
+    raw_data = ctypes.string_at(pixels_pointer, pitch * height)
+    pixel_array = np.frombuffer(raw_data, dtype = Uint32).copy()
+    pixel_array = pixel_array.reshape((height, width))
+    alpha_channel_array = (pixel_array & 0xFF) == 255
+    opaque_pixels = np.column_stack(np.where(alpha_channel_array))
+    
+    # Find boundary pixels
+    boundary_mask = np.zeros_like(alpha_channel_array, dtype=bool)
+
+    for y, x in opaque_pixels:
+        # Check 8-connected neighbors (up, down, left, right, diagonals)
+        if (y > 0 and not alpha_channel_array[y - 1, x]) or \
+           (y < height - 1 and not alpha_channel_array[y + 1, x]) or \
+           (x > 0 and not alpha_channel_array[y, x - 1]) or \
+           (x < width - 1 and not alpha_channel_array[y, x + 1]) or \
+           (y > 0 and x > 0 and not alpha_channel_array[y - 1, x - 1]) or \
+           (y > 0 and x < width - 1 and not alpha_channel_array[y - 1, x + 1]) or \
+           (y < height - 1 and x > 0 and not alpha_channel_array[y + 1, x - 1]) or \
+           (y < height - 1 and x < width - 1 and not alpha_channel_array[y + 1, x + 1]):
+            boundary_mask[y, x] = True
+    #print(boundary_mask)
+    # Get coordinates of boundary pixels
+    boundary_array = np.where(boundary_mask)
+    boundary_array = np.column_stack(boundary_array)
+    boundary_array = boundary_array[:, [1, 0]]
+    
+    # Convert to float for further processing
+    boundary_array = boundary_array.astype(float)
+    #print(boundary_array.size)
+    
+    SDL_UnlockSurface(surface)
+    return boundary_array
+
+def pixel_boundary_collision(object_1, object_2):
+    # Get non-transparent boundary pixels
+    pixel_array_1 = object_1.boundary_pixels.copy()
+    pixel_array_2 = object_2.boundary_pixels.copy()
+    #print(pixel_array_1, pixel_array_1.size)
+    
+    # Convert degrees to radians
+    angle_1 = np.radians(object_1.angle)
+    angle_2 = np.radians(object_2.angle)
+    
+    # Get object positions
+    p1 = np.array([object_1.x_pos, object_1.y_pos])
+    p2 = np.array([object_2.x_pos, object_2.y_pos])
+    
+    # Convert arrays to global coordinates
+    pixel_array_1 = coordinate_conversion(pixel_array_1, 
+                                          p1,
+                                          object_1.angle)
+    pixel_array_2 = coordinate_conversion(pixel_array_2,
+                                          p2,
+                                          object_2.angle)
+    
+    print(pixel_array_1, pixel_array_2)
+    
+    # Check if inside collision radius
+    # Object 1
+    p1_distances_1 = (pixel_array_1[:, 0] - p1[0]) ** 2 + (pixel_array_1[:, 1] - p1[1]) ** 2
+    pixel_array_1 = pixel_array_1[p1_distances_1 < object_1.collision_radius ** 2]
+    
+    p2_distances_1 = (pixel_array_2[:, 0] - p1[0]) ** 2 + (pixel_array_2[:, 1] - p1[1]) ** 2
+    pixel_array_2 = pixel_array_2[p2_distances_1 < object_1.collision_radius ** 2]
+    
+    # Object 2
+    p1_distances_2 = (pixel_array_1[:, 0] - p2[0]) ** 2 + (pixel_array_1[:, 1] - p2[1]) ** 2
+    pixel_array_1 = pixel_array_1[p1_distances_2 < object_2.collision_radius ** 2]
+    
+    p2_distances_2 = (pixel_array_2[:, 0] - p2[0]) ** 2 + (pixel_array_2[:, 1] - p2[1]) ** 2
+    pixel_array_2 = pixel_array_2[p2_distances_2 < object_2.collision_radius ** 2]
+    
+    # Check if empty
+    if (pixel_array_1.size == 0 or \
+        pixel_array_2.size == 0):
+        return 0
+    
+    #print(pixel_array_1, pixel_array_2)
+    
+    # Determine centroids
+    centroid_1 = np.array([np.mean(pixel_array_1[:, 0]), np.mean(pixel_array_1[:, 1])])
+    centroid_2 = np.array([np.mean(pixel_array_2[:, 0]), np.mean(pixel_array_2[:, 1])])
+    
+    
+    return [centroid_1, centroid_2]
+
+def get_boundary_pixels(surface):
+    SDL_LockSurface(surface)
+    pixels_pointer = surface.contents.pixels
+    pitch = surface.contents.pitch
+    height = surface.contents.h
+    width = surface.contents.w
+    
+    raw_data = ctypes.string_at(pixels_pointer, pitch * height)
+    pixel_array = np.frombuffer(raw_data, dtype = Uint32).copy()
+    pixel_array = pixel_array.reshape((height, width))
+    alpha_channel_array = (pixel_array & 0xFF) > 0
+    opaque_pixels = np.column_stack(np.where(alpha_channel_array))
+    
+    # Vectorized boundary detection using np.pad to check 8-connected neighbors
+    padded = np.pad(alpha_channel_array, pad_width=1, mode='constant', constant_values=False)
+    inner = padded[:-2, :-2] & padded[:-2, 1:-1] & padded[:-2, 2:] & \
+            padded[1:-1, :-2] & padded[1:-1, 2:] & \
+            padded[2:, :-2] & padded[2:, 1:-1] & padded[2:, 2:]
+    boundary_mask = alpha_channel_array & (~inner)
+    #print(boundary_mask)
+    # Get coordinates of boundary pixels
+    boundary_array = np.where(boundary_mask)
+    boundary_array = np.column_stack(boundary_array)
+    boundary_array = boundary_array[:, [1, 0]]
+    
+    # Convert to float for further processing
+    boundary_array = boundary_array.astype(float)
+    #print(boundary_array.size)
+    
+    SDL_UnlockSurface(surface)
+    return boundary_array
