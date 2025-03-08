@@ -62,7 +62,7 @@ while running:
     for i in background_dot_list:
         i.update([player_spaceship.x_velocity, player_spaceship.y_velocity])
         SDL_RenderTexture(renderer, i.texture, None, i.position_rect)
-    physics_update(asteroid_list)
+    physics_update(asteroid_list, renderer)
     i = 0
     while i < len(asteroid_list):
         #j = i

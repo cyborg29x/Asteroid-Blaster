@@ -4,26 +4,33 @@ import time
 from sdl3 import *
 from Collision import *
 
-def pixel_alpha_channel_extraction(surface):
+def pixel_alpha_channel_extraction(surface, renderer):
     SDL_LockSurface(surface)
-    pixels_pointer = surface.contents.pixels
+    
+    pixels_ptr = surface.contents.pixels
     pitch = surface.contents.pitch
     height = surface.contents.h
     width = surface.contents.w
     
-    raw_data = ctypes.string_at(pixels_pointer, pitch * height)
-    #print(raw_data)
-    pixel_array = np.frombuffer(raw_data, dtype = Uint32).copy()
-    #print(pixel_array)
-    pixel_array = pixel_array.reshape((height, width))
-    #print(pixel_array)
-    alpha_channel_array = (pixel_array & 0xFF) == 255
-    alpha_channel_array = np.where(alpha_channel_array)
-    alpha_channel_array = np.column_stack((alpha_channel_array[1], alpha_channel_array[0]))
-    alpha_channel_array = alpha_channel_array.astype(np.int32)
+    raw_data = ctypes.string_at(pixels_ptr, pitch * height)
+    pixel_array = np.frombuffer(raw_data, dtype=np.uint8).copy()
+    pixel_array = pixel_array.reshape((height, width, 4))
+    
+    # Identify non-transparent pixels
+    alpha_channel_mask = pixel_array[:, :, 3] > 0
+    
+    # Extract coordinates in (Y, X) order, then swap to (X, Y)
+    non_transparent_pixels = np.column_stack(np.where(alpha_channel_mask))[:, [1, 0]]  # Swap order
+    
+    non_transparent_pixels = non_transparent_pixels.astype(float)
+    
+    # Translate origin to center of surface
+    non_transparent_pixels[:, 0] -= width / 2
+    non_transparent_pixels[:, 1] -= height / 2
+    
     SDL_UnlockSurface(surface)
-    #print(alpha_channel_array.size)
-    return alpha_channel_array
+    
+    return non_transparent_pixels
 
 # Calculate the angle between the y-axis and the vector pointing from point1 to point2
 def angle_y_axis_two_points(point1, point2):
@@ -41,81 +48,116 @@ def circle_collision(position_1, radius_1, position_2, radius_2):
     distance = np.sqrt((position_1[0] - position_2[0]) ** 2 + (position_1[1] - position_2[1]) ** 2)
     return distance < radius_1 + radius_2
 
-def pixel_boundary_collision(object_1, object_2):
-    # Get non-transparent boundary pixels
-    pixel_array_1 = object_1.boundary_pixels.copy()
-    pixel_array_2 = object_2.boundary_pixels.copy()
-
-    # Get object positions and collision radii squared
-    p1 = np.array([object_1.x_pos, object_1.y_pos])
-    p2 = np.array([object_2.x_pos, object_2.y_pos])
-    r1_squared = object_1.collision_radius ** 2
-    r2_squared = object_2.collision_radius ** 2
-
-    # Convert arrays to global coordinates
-    pixel_array_1 = coordinate_conversion(pixel_array_1, p1, object_1.angle)
-    pixel_array_2 = coordinate_conversion(pixel_array_2, p2, object_2.angle)
-
-    #print(pixel_array_1, pixel_array_2)
-
-    # Filter pixels outside collision radii using boolean indexing
-    mask1 = (pixel_array_1[:, 0] - p1[0]) ** 2 + (pixel_array_1[:, 1] - p1[1]) ** 2 < r1_squared
-    mask2 = (pixel_array_2[:, 0] - p1[0]) ** 2 + (pixel_array_2[:, 1] - p1[1]) ** 2 < r1_squared
-    mask3 = (pixel_array_1[:, 0] - p2[0]) ** 2 + (pixel_array_1[:, 1] - p2[1]) ** 2 < r2_squared
-    mask4 = (pixel_array_2[:, 0] - p2[0]) ** 2 + (pixel_array_2[:, 1] - p2[1]) ** 2 < r2_squared
-
-    pixel_array_1 = pixel_array_1[mask1 & mask3]
-    pixel_array_2 = pixel_array_2[mask2 & mask4]
-
-    print(pixel_array_1, pixel_array_2)
-    
-    # Check if either array is empty
-    if pixel_array_1.size == 0 and pixel_array_2.size == 0:
-        return 0
-
-    # Calculate centroids
-    centroid_1 = np.mean(pixel_array_1, axis=0)
-    centroid_2 = np.mean(pixel_array_2, axis=0)
-
-    #print(centroid_1, centroid_2)
-    
-    return [centroid_1, centroid_2]
-
-def coordinate_conversion(coordinates_array, translation_coordinate, angle = 0):
-    # Might be wrong somehow
-    
+def coordinate_conversion(coordinates_array, translation_coordinate, angle, renderer):
+    # Relies on correctly converted input array (move origin to center from top left)
     # Make sure to copy instead of referencing
     coordinates_array = coordinates_array.astype(float).copy()
     translation_coordinate = translation_coordinate.astype(float).copy()
     
-    # Transform angle from degrees (counterclockwise from right) to radians (clockwise from top)
+    #print(coordinates_array)
+    # Transform angle from degrees to radians (clockwise positive)
     angle = np.radians(angle)
+    #print(angle, np.cos(angle), np.sin(angle))
     
     # Store original values
     original_x = coordinates_array[:, 0]
     original_y = coordinates_array[:, 1]
     
+    #print(coordinates_array.shape, original_x.shape, original_y.shape)
+    
     # Apply rotation conversion
-    coordinates_array[:, 0] = original_x * np.cos(angle) + original_y * np.sin(angle)
-    coordinates_array[:, 1] = -original_x * np.sin(angle) + original_y * np.cos(angle)
-
+    rotation_matrix = np.array([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]])
+    coordinates_array[:, :2] = (coordinates_array[:, :2] @ rotation_matrix.T + translation_coordinate)
+    
+    #SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255)
+    #for pixel in coordinates_array:
+    #    SDL_RenderPoint(renderer, pixel[0], pixel[1])
+    #for pixel in pixel_array_2:
+    #    SDL_RenderPoint(renderer, pixel[0], pixel[1])
+    #SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255)
+    
     # Apply final translation to global coordinates
-    coordinates_array[:, 0] += translation_coordinate[0]
-    coordinates_array[:, 1] += translation_coordinate[1]
+    #coordinates_array[:, 0] += translation_coordinate[0]
+    #coordinates_array[:, 1] += translation_coordinate[1]
+
+    #SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255)
+    #for pixel in coordinates_array:
+    #    SDL_RenderPoint(renderer, pixel[0], pixel[1])
+    #SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255)
 
     #print(coordinates_array)
     return coordinates_array
 
+def pixel_boundary_collision(object_1, object_2, renderer):
+    # Get all non-transparent pixels
+    pixel_array_1 = object_1.alpha_channel_array.copy()
+    pixel_array_2 = object_2.alpha_channel_array.copy()
+
+    #SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255)
+    #for pixel in pixel_array_1:
+    #    SDL_RenderPoint(renderer, pixel[0], pixel[1])
+    #for pixel in pixel_array_2:
+    #    SDL_RenderPoint(renderer, pixel[0], pixel[1])
+    #SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255)
+
+    # Get object positions and collision radii squared
+    p1, p2 = np.array([object_1.x_pos, object_1.y_pos]), np.array([object_2.x_pos, object_2.y_pos])
+    r1_squared, r2_squared = object_1.collision_radius ** 2, object_2.collision_radius ** 2
+
+    # Convert arrays to global coordinates
+    pixel_array_1 = coordinate_conversion(pixel_array_1, p1, object_1.angle, renderer)
+    pixel_array_2 = coordinate_conversion(pixel_array_2, p2, object_2.angle, renderer)
+    #print(pixel_array_1, pixel_array_2)
+    #SDL_Delay(10)
+    
+    #SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255)
+    #for pixel in pixel_array_1:
+    #    SDL_RenderPoint(renderer, pixel[0], pixel[1])
+    #for pixel in pixel_array_2:
+    #    SDL_RenderPoint(renderer, pixel[0], pixel[1])
+    #SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255)
+    
+    # Filter pixels outside collision radii using boolean indexing
+    def is_point_inside(point, center, radius_squared):
+        return (point[0] - center[0]) ** 2 + (point[1] - center[1]) ** 2 < radius_squared
+
+    mask1 = [is_point_inside(point, p1, r1_squared) and is_point_inside(point, p2, r2_squared) for point in pixel_array_1]
+    mask2 = [is_point_inside(point, p1, r1_squared) and is_point_inside(point, p2, r2_squared) for point in pixel_array_2]
+
+    pixel_array_1, pixel_array_2 = pixel_array_1[mask1], pixel_array_2[mask2]
+    #print(pixel_array_1, pixel_array_2)
+    
+    #SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255)
+    #for pixel in pixel_array_1:
+    #    SDL_RenderPoint(renderer, pixel[0], pixel[1])
+    #for pixel in pixel_array_2:
+    #    SDL_RenderPoint(renderer, pixel[0], pixel[1])
+    #SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255)
+    
+    # Check if either array is empty
+    if pixel_array_1.size == 0 or pixel_array_2.size == 0:
+        return np.array([])
+
+    # Check if any pixels overlap
+    overlapping_pixels = np.array([pixel for pixel in pixel_array_1 if any(np.linalg.norm(pixel - pixel_array_2, axis=1) < 1)])
+
+    #SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255)
+    #for pixel in overlapping_pixels:
+    #    SDL_RenderPoint(renderer, pixel[0], pixel[1])
+    #SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255)
+
+    return overlapping_pixels
+
 def collision_update_v2(object_1, object_2):
-    print(object_1.is_colliding, object_2.is_colliding)
-    #if (object_1.is_colliding and \
-    #    object_2.is_colliding):
-    #    return 0
-    centroids = pixel_boundary_collision(object_1, object_2)
-    if centroids == 0:
+    #print(object_1.is_colliding, object_2.is_colliding)
+    if (object_1.is_colliding or \
+        object_2.is_colliding):
         return 0
-    centroid_1 = centroids[0]
-    centroid_2 = centroids[1]
+    #centroids = pixel_boundary_collision(object_1, object_2)
+    #if centroids == 0:
+    #    return 0
+    #centroid_1 = centroids[0]
+    #centroid_2 = centroids[1]
     
     p1 = np.array([object_1.x_pos, object_1.y_pos])
     v1 = np.array([object_1.x_velocity, object_1.y_velocity])
@@ -150,55 +192,33 @@ def collision_update_v2(object_1, object_2):
     object_2.x_velocity = v2_new[0]
     object_2.y_velocity = v2_new[1]
    
-def physics_update(objects_list):
-    t = 0
+def physics_update(objects_list, renderer):
     max_t = 20
-    while t < max_t:
-        # Initial moving of objects
-        i = 0
-        while i < len(objects_list):
-            objects_list[i].x_pos += objects_list[i].x_velocity / max_t
-            objects_list[i].y_pos += objects_list[i].y_velocity / max_t
-            # Bounce objects off of screen borders
-            if (objects_list[i].x_pos < 0
-                or objects_list[i].x_pos > 1280):
-                objects_list[i].x_velocity *= (-1)
-            
-            if (objects_list[i].y_pos < 0
-                or objects_list[i].y_pos > 720):
-                objects_list[i].y_velocity *= (-1)
-            i += 1
-        
-        # Check for collisions
-        i = 0
-        while i < len(objects_list):
-            j = i + 1
-            while j < len(objects_list):
-                if distance_between(objects_list[i], objects_list[j]) < objects_list[i].collision_radius + objects_list[j].collision_radius:
-                    print(pixel_boundary_collision(objects_list[i], objects_list[j]))
-                    #pass
-                    
-                # If there's a collision
-                if (distance_between(objects_list[i], objects_list[j]) < (objects_list[i].collision_radius + objects_list[j].collision_radius) and \
-                    pixel_boundary_collision(objects_list[i], objects_list[j]) != 0):
-                    # Mark as colliding to prevent further velocity adjustment until clear
-                    collision_update_v2(objects_list[i], objects_list[j])
-                    objects_list[i].is_colliding = True
-                    objects_list[j].is_colliding = True
-                else:
-                    # Mark as clear
-                    objects_list[i].is_colliding = False
-                    objects_list[j].is_colliding = False
-                j += 1
-            i +=1
-        t +=1
-    
-    # Final update of draw rectangles
-    i = 0
-    while i < len(objects_list):
-        objects_list[i].position_rect.x = objects_list[i].x_pos - objects_list[i].width / 2
-        objects_list[i].position_rect.y = objects_list[i].y_pos - objects_list[i].height / 2
-        i += 1
+    for t in range(max_t):
+        for obj in objects_list:
+            obj.x_pos += obj.x_velocity / max_t
+            obj.y_pos += obj.y_velocity / max_t
+
+            if obj.x_pos < 0 or obj.x_pos > 1280:
+                obj.x_velocity *= -1
+            if obj.y_pos < 0 or obj.y_pos > 720:
+                obj.y_velocity *= -1
+
+        for i, obj1 in enumerate(objects_list):
+            for obj2 in objects_list[i + 1:]:
+                collision_distance = obj1.collision_radius + obj2.collision_radius
+                if distance_between(obj1, obj2) < collision_distance:
+                    colliding_pixels = pixel_boundary_collision(obj1, obj2, renderer)
+                    #print(colliding_pixels)
+                    if colliding_pixels.size > 0:
+                        collision_update_v2(obj1, obj2)
+                        obj1.is_colliding = obj2.is_colliding = True
+                    else:
+                        obj1.is_colliding = obj2.is_colliding = False
+
+    for obj in objects_list:
+        obj.position_rect.x = obj.x_pos - obj.width / 2
+        obj.position_rect.y = obj.y_pos - obj.height / 2
         
 def distance_between(object_1, object_2):
     return np.sqrt((object_1.x_pos - object_2.x_pos) ** 2 + (object_1.y_pos - object_2.y_pos) ** 2)

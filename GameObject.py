@@ -72,11 +72,13 @@ class Asteroid():
         self.y_velocity = np.random.randint(-16, 16) / 10
         self.vel = np.array([self.x_velocity, self.y_velocity])
         self.angle = np.random.randint(0, 360)
+        #self.angle = 90
+        #print(self.angle)
         self.angular_velocity = np.random.randint(-10, 10) / 10
         self.file_path = "c:/Users/Mike/3D Objects/AI_Project/asteroid.png"
         self.surface = IMG_Load(self.file_path.encode("utf-8"))
         self.surface = SDL_ConvertSurface(self.surface, SDL_PIXELFORMAT_RGBA8888)
-        self.alpha_channel_array = pixel_alpha_channel_extraction(self.surface).copy()
+        self.alpha_channel_array = pixel_alpha_channel_extraction(self.surface, renderer).copy()
         #print(self.alpha_channel_array)
         self.width = self.surface.contents.w
         self.height = self.surface.contents.h

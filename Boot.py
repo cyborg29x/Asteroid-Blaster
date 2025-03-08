@@ -21,6 +21,6 @@ class GameObject():
         self.name = name
         temporary_surface = IMG_Load(file_path)
         temporary_surface = SDL_ConvertSurface(temporary_surface, SDL_PIXELFORMAT_RGBA8888)
-        self.bitmask = pixel_alpha_channel_extraction(temporary_surface)
+        self.bitmask = pixel_alpha_channel_extraction(temporary_surface, renderer)
         self.texture = SDL_CreateTextureFromSurface(renderer, temporary_surface)
         SDL_DestroySurface(temporary_surface)

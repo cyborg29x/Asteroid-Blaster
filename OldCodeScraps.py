@@ -511,3 +511,83 @@ def get_boundary_pixels(surface):
     
     SDL_UnlockSurface(surface)
     return boundary_array
+
+def pixel_boundary_collision(object_1, object_2):
+    # Get non-transparent boundary pixels
+    pixel_array_1 = object_1.boundary_pixels.copy()
+    pixel_array_2 = object_2.boundary_pixels.copy()
+
+    # Get object positions and collision radii squared
+    p1 = np.array([object_1.x_pos, object_1.y_pos])
+    p2 = np.array([object_2.x_pos, object_2.y_pos])
+    r1_squared = object_1.collision_radius ** 2
+    r2_squared = object_2.collision_radius ** 2
+
+    # Convert arrays to global coordinates
+    pixel_array_1 = coordinate_conversion(pixel_array_1, p1, object_1.angle)
+    pixel_array_2 = coordinate_conversion(pixel_array_2, p2, object_2.angle)
+
+    #print(pixel_array_1, pixel_array_2)
+
+    # Filter pixels outside collision radii using boolean indexing
+    mask1 = (pixel_array_1[:, 0] - p1[0]) ** 2 + (pixel_array_1[:, 1] - p1[1]) ** 2 < r1_squared
+    mask2 = (pixel_array_2[:, 0] - p1[0]) ** 2 + (pixel_array_2[:, 1] - p1[1]) ** 2 < r1_squared
+    mask3 = (pixel_array_1[:, 0] - p2[0]) ** 2 + (pixel_array_1[:, 1] - p2[1]) ** 2 < r2_squared
+    mask4 = (pixel_array_2[:, 0] - p2[0]) ** 2 + (pixel_array_2[:, 1] - p2[1]) ** 2 < r2_squared
+
+    pixel_array_1 = pixel_array_1[mask1 & mask3]
+    pixel_array_2 = pixel_array_2[mask2 & mask4]
+
+    #print(pixel_array_1, pixel_array_2)
+    
+    # Check if either array is empty
+    if pixel_array_1.size == 0 or pixel_array_2.size == 0:
+        return 0
+
+    # Calculate centroids
+    centroid_1 = np.mean(pixel_array_1, axis=0)
+    centroid_2 = np.mean(pixel_array_2, axis=0)
+
+    #print(centroid_1, centroid_2)
+    
+    return [centroid_1, centroid_2]
+
+def coordinate_conversion(coordinates_array, translation_coordinate, angle, renderer):
+    # Relies on correctly converted input array (move origin to center from top left)
+    # Make sure to copy instead of referencing
+    coordinates_array = coordinates_array.astype(float).copy()
+    translation_coordinate = translation_coordinate.astype(float).copy()
+    
+    #print(coordinates_array)
+    # Transform angle from degrees to radians (clockwise positive)
+    angle = np.radians(angle)
+    print(angle, np.cos(angle), np.sin(angle))
+    
+    # Store original values
+    original_x = coordinates_array[:, 0]
+    original_y = coordinates_array[:, 1]
+    
+    #print(coordinates_array.shape, original_x.shape, original_y.shape)
+    
+    #SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255)
+    #for pixel in coordinates_array:
+    #    SDL_RenderPoint(renderer, pixel[0], pixel[1])
+    #for pixel in pixel_array_2:
+    #    SDL_RenderPoint(renderer, pixel[0], pixel[1])
+    #SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255)
+    
+    # Apply rotation conversion
+    coordinates_array[:, 0] = original_x * np.cos(angle) + original_y * np.sin(angle)
+    coordinates_array[:, 1] = -original_x * np.sin(angle) + original_y * np.cos(angle)
+
+    # Apply final translation to global coordinates
+    coordinates_array[:, 0] += translation_coordinate[0]
+    coordinates_array[:, 1] += translation_coordinate[1]
+
+    SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255)
+    for pixel in coordinates_array:
+        SDL_RenderPoint(renderer, pixel[0], pixel[1])
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255)
+
+    #print(coordinates_array)
+    return coordinates_array
