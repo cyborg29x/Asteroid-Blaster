@@ -1,10 +1,24 @@
 import numpy as np
 import ctypes
 import time
+import scipy
 from sdl3 import *
 from Collision import *
 
 def pixel_alpha_channel_extraction(surface, renderer):
+    """
+    Given a surface, this function extracts the non-transparent edge pixels, then summarizes them into 10 representative points.
+
+    The process works as follows:
+    1. Lock the surface and get the raw pixel data
+    2. Identify non-transparent pixels by checking the alpha channel
+    3. Create a padded mask to handle edges correctly
+    4. Identify edge pixels by comparing neighbors in a padded mask
+    5. Extract coordinates in (Y, X) order, then swap to (X, Y)
+    6. Translate origin to center of surface
+    7. Summarize the edge pixels into 10 representative points
+    8. Unlock the surface
+    """
     SDL_LockSurface(surface)
     
     pixels_ptr = surface.contents.pixels
@@ -17,10 +31,23 @@ def pixel_alpha_channel_extraction(surface, renderer):
     pixel_array = pixel_array.reshape((height, width, 4))
     
     # Identify non-transparent pixels
-    alpha_channel_mask = pixel_array[:, :, 3] > 0
+    alpha_channel_mask = pixel_array[:, :, 3] == 255
+    
+    # Create a padded mask to handle edges correctly
+    padded_mask = np.pad(alpha_channel_mask, pad_width=1, mode='constant', constant_values=False)
+    
+    # Identify edge pixels by comparing neighbors in a padded mask
+    edge_pixels = padded_mask[:-2, 1:-1] != alpha_channel_mask
+    edge_pixels |= padded_mask[2:, 1:-1] != alpha_channel_mask
+    edge_pixels |= padded_mask[1:-1, :-2] != alpha_channel_mask
+    edge_pixels |= padded_mask[1:-1, 2:] != alpha_channel_mask
+    edge_pixels |= padded_mask[:-2, :-2] != alpha_channel_mask
+    edge_pixels |= padded_mask[2:, 2:] != alpha_channel_mask
+    edge_pixels |= padded_mask[2:, :-2] != alpha_channel_mask
+    edge_pixels |= padded_mask[:-2, 2:] != alpha_channel_mask
     
     # Extract coordinates in (Y, X) order, then swap to (X, Y)
-    non_transparent_pixels = np.column_stack(np.where(alpha_channel_mask))[:, [1, 0]]  # Swap order
+    non_transparent_pixels = np.column_stack(np.where(edge_pixels))[:, [1, 0]]  # Swap order
     
     non_transparent_pixels = non_transparent_pixels.astype(float)
     
@@ -28,9 +55,25 @@ def pixel_alpha_channel_extraction(surface, renderer):
     non_transparent_pixels[:, 0] -= width / 2
     non_transparent_pixels[:, 1] -= height / 2
     
-    SDL_UnlockSurface(surface)
+    # Summarize the edge pixels into 100 representative points
+    num_points = int(len(non_transparent_pixels) / 5)
+    kmeans = scipy.cluster.vq.kmeans(non_transparent_pixels, num_points)
+    representative_points = kmeans[0]
     
-    return non_transparent_pixels
+    # Unlock the surface
+    SDL_UnlockSurface(surface)
+    return representative_points
+
+def pixel_array_to_hash_map(pixel_array, cell_size=2):
+    hash_map = {}
+    for pixel in pixel_array:
+        cell_x = int(pixel[0] // cell_size)
+        cell_y = int(pixel[1] // cell_size)
+        cell_key = (cell_x, cell_y)
+        if cell_key not in hash_map:
+            hash_map[cell_key] = []
+        hash_map[cell_key].append(pixel)
+    return hash_map
 
 # Calculate the angle between the y-axis and the vector pointing from point1 to point2
 def angle_y_axis_two_points(point1, point2):
@@ -53,6 +96,16 @@ def coordinate_conversion(coordinates_array, translation_coordinate, angle, rend
     # Make sure to copy instead of referencing
     coordinates_array = coordinates_array.astype(float).copy()
     translation_coordinate = translation_coordinate.astype(float).copy()
+    
+    
+    coordinates_copy = coordinates_array.copy()
+    #coordinates_copy[:, 0] += width / 2
+    #coordinates_copy[:, 1] += height / 2
+    
+    #SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255)
+    #for pixel in coordinates_copy:
+    #    SDL_RenderPoint(renderer, pixel[0], pixel[1])
+    #SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255)
     
     #print(coordinates_array)
     # Transform angle from degrees to radians (clockwise positive)
@@ -138,8 +191,20 @@ def pixel_boundary_collision(object_1, object_2, renderer):
     if pixel_array_1.size == 0 or pixel_array_2.size == 0:
         return np.array([])
 
-    # Check if any pixels overlap
-    overlapping_pixels = np.array([pixel for pixel in pixel_array_1 if any(np.linalg.norm(pixel - pixel_array_2, axis=1) < 1)])
+    # Convert pixel arrays to hash maps
+    hash_map_1 = pixel_array_to_hash_map(pixel_array_1, 4)
+    hash_map_2 = pixel_array_to_hash_map(pixel_array_2, 4)
+
+    # Check for overlapping pixels using hash maps
+    overlapping_pixels = []
+    for cell_key in hash_map_1:
+        if cell_key in hash_map_2:
+            for pixel in hash_map_1[cell_key]:
+                for p2 in hash_map_2[cell_key]:
+                    if np.linalg.norm(pixel - p2, axis=0).max() < 1:
+                        overlapping_pixels.append(pixel)
+
+    overlapping_pixels = np.array(overlapping_pixels)
 
     #SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255)
     #for pixel in overlapping_pixels:
@@ -153,11 +218,6 @@ def collision_update_v2(object_1, object_2):
     if (object_1.is_colliding or \
         object_2.is_colliding):
         return 0
-    #centroids = pixel_boundary_collision(object_1, object_2)
-    #if centroids == 0:
-    #    return 0
-    #centroid_1 = centroids[0]
-    #centroid_2 = centroids[1]
     
     p1 = np.array([object_1.x_pos, object_1.y_pos])
     v1 = np.array([object_1.x_velocity, object_1.y_velocity])
@@ -165,26 +225,19 @@ def collision_update_v2(object_1, object_2):
     p2 = np.array([object_2.x_pos, object_2.y_pos])
     v2 = np.array([object_2.x_velocity, object_2.y_velocity])
     
-    #n = centroid_1 - centroid_2
     n = p1 - p2
     n = n / np.linalg.norm(n)
     
-    v1_n = np.dot(v1, n) * n
-    v1_t = v1 - v1_n
-    
-    v2_n = np.dot(v2, n) * n
-    v2_t = v2 - v2_n
-    
-    relative_velocity_n = np.dot(v1 - v2, n)
-    if relative_velocity_n > 0:
+    v_rel = v1 - v2
+    v_rel_n = np.dot(v_rel, n)
+    if v_rel_n > 0:
         return 0
     
-    # Velocity impulse
-    m1 = np.sum(object_1.alpha_channel_array)
-    m2 = np.sum(object_2.alpha_channel_array)
-    e = 1
-    v1_new = v1 - ((1 + e) * m2 / (m1 + m2)) * np.dot(v1 - v2, n) * n
-    v2_new = v2 + ((1 + e) * m1 / (m1 + m2)) * np.dot(v1 - v2, n) * n
+    j = -(1 + 1) * v_rel_n
+    j = j / (1/100 + 1/100)
+    
+    v1_new = v1 + j * n / 100
+    v2_new = v2 - j * n / 100
     
     object_1.x_velocity = v1_new[0]
     object_1.y_velocity = v1_new[1]
@@ -198,6 +251,7 @@ def physics_update(objects_list, renderer):
         for obj in objects_list:
             obj.x_pos += obj.x_velocity / max_t
             obj.y_pos += obj.y_velocity / max_t
+            obj.angle += obj.angular_velocity / max_t
 
             if obj.x_pos < 0 or obj.x_pos > 1280:
                 obj.x_velocity *= -1

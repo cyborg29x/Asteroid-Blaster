@@ -6,6 +6,7 @@ from Collision import *
 
 class Spaceship():
     def __init__(self, x, y, renderer):
+        self.name = "player_ship"
         self.x_pos = x
         self.y_pos = y
         self.x_velocity = 0
@@ -38,6 +39,7 @@ class Spaceship():
 
 class Missile():
     def __init__(self, x, y, x_velocity, y_velocity, angle, renderer):
+        self.name = "missile"
         self.x_pos = x
         self.y_pos = y
         self.angle = angle
@@ -65,6 +67,7 @@ class Missile():
 
 class Asteroid():
     def __init__(self, renderer):
+        self.name = "asteroid"
         self.x_pos = np.random.randint(0, 1280)
         self.y_pos = np.random.randint(0, 720)
         self.pos = np.array([self.x_pos, self.y_pos])
